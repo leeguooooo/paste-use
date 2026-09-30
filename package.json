@@ -1,0 +1,10 @@
+{
+  "name": "paste-use",
+  "version": "0.1.0",
+  "description": "Pastyx clipboard history for agents: list, search, read and re-copy what you copied, from the local database. Part of the *-use family.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "paste-use": "./src/cli.ts" },
+  "scripts": { "test": "bun test", "check": "bun test && bunx tsc --noEmit" },
+  "devDependencies": { "@types/bun": "^1.4.0", "typescript": "^5.5.0" }
+}

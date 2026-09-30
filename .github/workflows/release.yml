@@ -1,0 +1,130 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  binaries:
+    strategy:
+      matrix:
+        include:
+          - os: macos-26
+            target: bun-darwin-arm64
+            asset: paste-use-darwin-arm64
+          - os: macos-26-intel
+            target: bun-darwin-x64
+            asset: paste-use-darwin-x64
+    runs-on: ${{ matrix.os }}
+    # secrets 不能出现在步骤级 if 里（整个 workflow 会被拒、没有日志），提到 job 级 env。
+    # secret 名与 leeguooooo/chrome-use、iphone-use、message-use 一致。
+    env:
+      HAS_SIGNING: ${{ secrets.APPLE_SIGNING_CERTIFICATE != '' && secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD != '' && secrets.APPLE_SIGN_IDENTITY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: release notes exist in CHANGELOG.md
+        run: scripts/release-notes.sh "${GITHUB_REF_NAME}" > /dev/null
+      - run: bun install
+      - run: bun test
+      - name: build binary
+        run: bun build --compile --target=${{ matrix.target }} src/cli.ts --outfile paste-use
+      # Developer ID 签名 + 公证：ad-hoc 签名每次构建 cdhash 都变，macOS 防火墙 / Gatekeeper
+      # 把每个新版本当陌生程序（浏览器下载的会被拒、防火墙要重新放行）。hardened runtime 下
+      # bun 的 JavaScriptCore 需要 JIT 两项 entitlements（scripts/entitlements.plist）。
+      # 裸可执行文件没法 staple，公证结果由 Gatekeeper 在线查。
+      - name: sign and notarize macOS binary (Developer ID)
+        if: env.HAS_SIGNING == 'true'
+        env:
+          APPLE_SIGNING_CERTIFICATE: ${{ secrets.APPLE_SIGNING_CERTIFICATE }}
+          APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
+          APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          kc="$RUNNER_TEMP/signing.keychain-db"
+          pw="$(openssl rand -hex 20)"
+          security create-keychain -p "$pw" "$kc"
+          security set-keychain-settings -lut 21600 "$kc"
+          security unlock-keychain -p "$pw" "$kc"
+          echo "$APPLE_SIGNING_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$APPLE_SIGNING_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$pw" "$kc" >/dev/null
+          security list-keychain -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          codesign --force --options runtime --timestamp --entitlements scripts/entitlements.plist \
+            -s "$APPLE_SIGN_IDENTITY" --keychain "$kc" paste-use
+          codesign --verify --strict --verbose=2 paste-use
+          echo "$APPLE_API_KEY_P8" | base64 --decode > "$RUNNER_TEMP/asc.p8"
+          ditto -c -k --keepParent paste-use "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --key "$RUNNER_TEMP/asc.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" \
+            --wait --timeout 30m
+          rm -f "$RUNNER_TEMP/asc.p8" "$RUNNER_TEMP/notarize.zip"
+          spctl -a -vvv -t install paste-use
+          security delete-keychain "$kc" || true
+      # 没有签名 secrets（fork 构建 tag）时退回 ad-hoc：未签名的构建照样能用，不算失败。
+      - name: ad-hoc sign macOS binary
+        if: env.HAS_SIGNING != 'true'
+        run: |
+          codesign --force --sign - paste-use
+          codesign --verify --deep --strict --verbose=4 paste-use
+      - name: smoke test release binary
+        run: ./paste-use version
+      - name: package binary
+        run: |
+          tar -czf ${{ matrix.asset }}.tar.gz paste-use
+          shasum -a 256 ${{ matrix.asset }}.tar.gz > ${{ matrix.asset }}.tar.gz.sha256
+      - name: attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          scripts/release-notes.sh "${GITHUB_REF_NAME}" > release-notes.md
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md 2>/dev/null \
+            || gh release edit "${GITHUB_REF_NAME}" --notes-file release-notes.md
+          # All three jobs race to create the release; a just-created one can still read as
+          # "release not found" for a few seconds, so retry the upload.
+          for attempt in 1 2 3 4 5; do
+            gh release upload "${GITHUB_REF_NAME}" ${{ matrix.asset }}.tar.gz ${{ matrix.asset }}.tar.gz.sha256 --clobber && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: release notes exist in CHANGELOG.md
+        shell: bash
+        run: scripts/release-notes.sh "${GITHUB_REF_NAME}" > /dev/null
+      - run: bun install
+      # The test suite runs in the macOS jobs (its fixtures use POSIX paths); here the
+      # binary is built natively and smoke-tested.
+      - name: build binary
+        run: bun build --compile --target=bun-windows-x64 src/cli.ts --outfile paste-use.exe
+      - name: smoke test release binary
+        run: ./paste-use.exe version
+      - name: package binary
+        shell: pwsh
+        run: |
+          Compress-Archive -Path paste-use.exe -DestinationPath paste-use-windows-x64.zip
+          $hash = (Get-FileHash -Algorithm SHA256 paste-use-windows-x64.zip).Hash.ToLowerInvariant()
+          # Same "<hash>  <file>" line shasum writes, LF-terminated.
+          [IO.File]::WriteAllText("paste-use-windows-x64.zip.sha256", "$hash  paste-use-windows-x64.zip`n")
+      - name: attach to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          scripts/release-notes.sh "${GITHUB_REF_NAME}" > release-notes.md
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md 2>/dev/null \
+            || gh release edit "${GITHUB_REF_NAME}" --notes-file release-notes.md
+          for attempt in 1 2 3 4 5; do
+            gh release upload "${GITHUB_REF_NAME}" paste-use-windows-x64.zip paste-use-windows-x64.zip.sha256 --clobber && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1

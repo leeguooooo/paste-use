@@ -1,0 +1,21 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun test
+      - run: bunx tsc --noEmit
+      - name: build and smoke test binary
+        run: |
+          bun build --compile src/cli.ts --outfile /tmp/paste-use
+          codesign --force --sign - /tmp/paste-use
+          /tmp/paste-use version
+      - name: cross-compile the Windows binary
+        run: bun build --compile --target=bun-windows-x64 src/cli.ts --outfile /tmp/paste-use.exe
