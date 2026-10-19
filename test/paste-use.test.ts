@@ -205,7 +205,7 @@ test("upgrade plumbing: version order and the per-platform installer", () => {
 });
 
 test("the embedded skill is SKILL.md", () => {
-  expect(SKILL_MD).toBe(readFileSync(join(import.meta.dir, "..", "SKILL.md"), "utf8"));
+  expect(SKILL_MD).toBe(readFileSync(join(import.meta.dir, "..", "skills", "paste-use", "SKILL.md"), "utf8"));
   expect(SKILL_MD.startsWith("---\nname: paste-use\n")).toBe(true);
 });
 

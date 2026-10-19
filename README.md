@@ -42,6 +42,8 @@ macOS 14+ (Apple silicon or Intel) and Windows 10/11 x64. macOS binaries are Dev
 
 Claude Code: `/plugin install paste-use@leeguooooo-plugins` (or the whole family: `use-family@leeguooooo-plugins`).
 
+The source Skill lives in `skills/paste-use/`; copy that folder for manual agent setup. `paste-use skill install` installs the same embedded instructions offline.
+
 ## Privacy
 
 A clipboard history holds whatever was copied, passwords and API keys included. paste-use is built so an agent doesn't pull those into a chat by accident:

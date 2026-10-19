@@ -42,6 +42,8 @@ irm https://raw.githubusercontent.com/leeguooooo/paste-use/main/install.ps1 | ie
 
 Claude Code：`/plugin install paste-use@leeguooooo-plugins`（或者整个家族：`use-family@leeguooooo-plugins`）。
 
+源码 Skill 位于 `skills/paste-use/`；手动配置 agent 时复制整个目录。`paste-use skill install` 可离线安装相同的内嵌指令。
+
 ## 隐私
 
 剪贴板历史里什么都有，密码和 API key 也在。paste-use 默认不让 agent 把这些带进对话：
