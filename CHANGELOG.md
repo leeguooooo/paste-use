@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- `paste-use skill install` (also run by the installer and `upgrade`) no longer writes `~/.claude/skills/paste-use` or `~/.codex/skills/paste-use` when the Claude Code or Codex plugin already provides the skill, so it is not listed twice. A copy it wrote earlier (a lone, unchanged `SKILL.md`) is removed; anything else in that folder is left alone.
+
 ## 0.1.1
 
 - The Skill moved to `skills/paste-use/`, the standard folder Claude Code and Codex enumerate. `paste-use skill install` still installs the embedded copy offline.

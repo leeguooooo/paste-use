@@ -1,6 +1,6 @@
 {
   "name": "paste-use",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Pastyx clipboard history for agents: list, search, read and re-copy what you copied, from the local database. Part of the *-use family.",
   "license": "MIT",
   "type": "module",
