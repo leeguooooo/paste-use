@@ -37,7 +37,7 @@ import {
 } from "./upgrade.ts";
 import { SKILL_MD } from "./skill.ts";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.1.1";
 export const DOWNLOAD_URL = "https://paste.leeguoo.com/download";
 
 const HELP = `paste-use ${VERSION} — your Pastyx clipboard history, for agents.
