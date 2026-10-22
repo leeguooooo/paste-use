@@ -2,7 +2,7 @@
 // paste-use — the Pastyx clipboard history for agents: list, search, read and re-copy what the
 // user copied, straight from the app's local database (read-only). Part of the *-use family.
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { homedir, tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
@@ -30,6 +30,7 @@ import {
   detectSkillChannels,
   installerCommand,
   maybeUpdateNotice,
+  pluginProvidesSkill,
   refreshSkills,
   runInstaller,
   runUpdateCheck,
@@ -606,8 +607,22 @@ function cmdStatus(p: Parsed): void {
 
 function installSkill(): void {
   const home = homedir();
-  for (const dir of [join(home, ".claude", "skills", "paste-use"), join(home, ".codex", "skills", "paste-use")]) {
+  for (const [host, dir] of [["claude", join(home, ".claude", "skills", "paste-use")], ["codex", join(home, ".codex", "skills", "paste-use")]] as const) {
     const path = join(dir, "SKILL.md");
+    if (pluginProvidesSkill(host, home)) {
+      // Remove only a copy this command wrote: a lone SKILL.md identical to the embedded one.
+      try {
+        if (readdirSync(dir).join() === "SKILL.md" && readFileSync(path, "utf8") === SKILL_MD) {
+          rmSync(dir, { recursive: true });
+          console.log(`skill copy removed: ${dir} (the ${host === "claude" ? "Claude Code" : "Codex"} plugin provides it)`);
+          continue;
+        }
+      } catch {
+        // no earlier copy
+      }
+      console.log(`skill skipped: ${dir} (the ${host === "claude" ? "Claude Code" : "Codex"} plugin provides it)`);
+      continue;
+    }
     mkdirSync(dirname(path), { recursive: true });
     try {
       if (readFileSync(path, "utf8") === SKILL_MD) {

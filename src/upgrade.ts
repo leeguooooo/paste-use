@@ -133,6 +133,20 @@ function gitRoot(dir: string): string | null {
   return out.status === 0 && typeof out.stdout === "string" && out.stdout.trim() !== "" ? out.stdout.trim() : null;
 }
 
+/** Whether a host plugin already provides the paste-use skill, so a personal copy there would list it twice. */
+export function pluginProvidesSkill(host: "claude" | "codex", home: string = homedir()): boolean {
+  try {
+    if (host === "claude") return readFileSync(join(home, ".claude", "plugins", "installed_plugins.json"), "utf8").includes(`"${PLUGIN_ID}`);
+    const config = readFileSync(join(home, ".codex", "config.toml"), "utf8");
+    const at = config.indexOf(`[plugins."${PLUGIN_ID}"]`);
+    if (at < 0) return false;
+    const section = config.slice(at).split(/\n(?=\[)/)[0]!;
+    return /^\s*enabled\s*=\s*true\s*$/m.test(section);
+  } catch {
+    return false;
+  }
+}
+
 /** Convention §3: every copy of the paste-use skill on this machine and how to refresh it. */
 export function detectSkillChannels(home: string = homedir()): SkillChannel[] {
   const found: SkillChannel[] = [];
